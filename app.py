@@ -6,66 +6,56 @@ import seaborn as sns
 from scipy.stats import norm
 import google.generativeai as genai
 
-# ========================
-# CONFIGURACIÓN
-# ========================
-st.set_page_config(page_title="App Estadística", layout="centered")
-
-# ========================
-# API GEMINI
-# ========================
+# ================================
+# CONFIGURACIÓN DE GEMINI
+# ================================
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('gemini-2.5-flash')
 else:
-    st.error("⚠️ Falta la API KEY de Gemini")
+    st.error("⚠️ No se encontró la GEMINI_API_KEY en los secretos de Streamlit.")
 
-# ========================
-# TÍTULO
-# ========================
-st.title("📊 App Estadística con IA")
-st.write("Aplicación para análisis de datos, prueba Z e interpretación con IA")
+st.title("📊 App de Estadística con IA")
+st.write("Proyecto final - Probabilidad y Estadística")
 
-st.divider()
-
-# ========================
+# ================================
 # CARGA DE DATOS
-# ========================
+# ================================
 st.header("📂 Carga de datos")
-
 archivo = st.file_uploader("Sube un archivo CSV", type=["csv"])
 
-if archivo:
+if archivo is not None:
     df = pd.read_csv(archivo)
+    st.write("Datos cargados:")
+    st.dataframe(df)
 else:
+    st.info("Generando datos de ejemplo...")
     data = np.random.normal(50, 10, 100)
     df = pd.DataFrame(data, columns=["valores"])
+    st.dataframe(df)
 
-st.dataframe(df)
-
-st.divider()
-
-# ========================
+# ================================
 # VISUALIZACIÓN
-# ========================
-st.header("📊 Visualización")
+# ================================
+st.header("📊 Visualización de datos")
+col = st.selectbox("Selecciona variable para analizar", df.columns)
 
-col = st.selectbox("Variable", df.columns)
+col1, col2 = st.columns(2)
 
-fig, ax = plt.subplots()
-sns.histplot(df[col], kde=True, ax=ax)
-st.pyplot(fig)
+with col1:
+    fig, ax = plt.subplots()
+    sns.histplot(df[col], kde=True, ax=ax)
+    st.pyplot(fig)
 
-fig2, ax2 = plt.subplots()
-sns.boxplot(x=df[col], ax=ax2)
-st.pyplot(fig2)
+with col2:
+    fig2, ax2 = plt.subplots()
+    sns.boxplot(x=df[col], ax=ax2)
+    st.pyplot(fig2)
 
-st.divider()
-
-# ========================
-# ANÁLISIS DISTRIBUCIÓN
-# ========================
-st.header("🧠 Análisis de la distribución")
+# ================================
+# ✅ ANÁLISIS AUTOMÁTICO (NUEVO)
+# ================================
+st.subheader("📌 Análisis de la distribución")
 
 media = df[col].mean()
 mediana = df[col].median()
@@ -74,64 +64,39 @@ st.write(f"Media: {media:.2f}")
 st.write(f"Mediana: {mediana:.2f}")
 
 if abs(media - mediana) < 1:
-    sesgo = "Distribución aproximadamente normal"
-elif media > mediana:
-    sesgo = "Sesgo positivo"
+    st.write("✔ La distribución parece aproximadamente normal")
 else:
-    sesgo = "Sesgo negativo"
+    st.write("⚠ La distribución puede tener sesgo")
 
-# RESPUESTAS
-st.write("¿La distribución parece normal?")
-st.write("Sí" if abs(media - mediana) < 1 else "No completamente")
-
-st.write("¿Hay sesgo?")
-st.write(sesgo)
-
-st.write("¿Hay outliers?")
+# Outliers
 q1 = df[col].quantile(0.25)
 q3 = df[col].quantile(0.75)
 iqr = q3 - q1
 
-outliers = df[(df[col] < q1 - 1.5*iqr) | (df[col] > q3 + 1.5*iqr)]
-st.write("Sí hay" if len(outliers) > 0 else "No hay")
+outliers = df[(df[col] < q1 - 1.5 * iqr) | (df[col] > q3 + 1.5 * iqr)]
 
-st.divider()
-
-# ========================
-# PRUEBA Z
-# ========================
-st.header("📈 Prueba Z")
-
-media_muestral = st.number_input("Media muestral", value=float(media))
-media_hipotetica = st.number_input("Media H0", value=50.0)
-sigma = st.number_input("Sigma", value=float(df[col].std()))
-n = st.number_input("n", value=len(df))
-alpha = st.slider("Alpha", 0.01, 0.10, 0.05)
-
-tipo = st.selectbox("Tipo", ["bilateral", "izquierda", "derecha"])
-
-# HIPÓTESIS
-st.subheader("Hipótesis")
-
-if tipo == "bilateral":
-    st.write("H0: μ = valor")
-    st.write("H1: μ ≠ valor")
-elif tipo == "derecha":
-    st.write("H0: μ ≤ valor")
-    st.write("H1: μ > valor")
+if len(outliers) > 0:
+    st.write(f"⚠ Hay {len(outliers)} outliers detectados")
 else:
-    st.write("H0: μ ≥ valor")
-    st.write("H1: μ < valor")
+    st.write("✔ No se detectaron outliers")
 
-# SUPUESTOS
-st.subheader("Supuestos")
+# ================================
+# PRUEBA Z
+# ================================
+st.header("📈 Prueba de hipótesis (Z)")
 
-st.write("• n ≥ 30")
-st.write("• Varianza conocida")
-st.write("• Datos aproximadamente normales")
+c1, c2, c3 = st.columns(3)
+media_muestral = c1.number_input("Media muestral", value=float(df[col].mean()))
+media_hipotetica = c2.number_input("Media hipotética (H0)", value=50.0)
+sigma = c3.number_input("Desviación estándar (σ)", value=float(df[col].std()))
 
-if st.button("Ejecutar"):
+c4, c5 = st.columns(2)
+n = c4.number_input("Tamaño de muestra (n)", min_value=1, value=len(df))
+alpha = c5.slider("Nivel de significancia (α)", 0.01, 0.10, 0.05)
 
+tipo = st.selectbox("Tipo de prueba", ["bilateral", "izquierda", "derecha"])
+
+if st.button("🚀 Ejecutar análisis"):
     z = (media_muestral - media_hipotetica) / (sigma / np.sqrt(n))
 
     if tipo == "bilateral":
@@ -144,16 +109,14 @@ if st.button("Ejecutar"):
         p = norm.cdf(z)
         z_crit = norm.ppf(alpha)
 
-    decision = "Rechazar H0" if p < alpha else "No rechazar H0"
-
     st.session_state.z = z
     st.session_state.p = p
-    st.session_state.decision = decision
     st.session_state.z_crit = z_crit
+    st.session_state.decision = "Rechazar H0" if p < alpha else "No rechazar H0"
 
-# ========================
+# ================================
 # RESULTADOS
-# ========================
+# ================================
 if "z" in st.session_state:
 
     z = st.session_state.z
@@ -161,25 +124,19 @@ if "z" in st.session_state:
     decision = st.session_state.decision
     z_crit = st.session_state.z_crit
 
-    st.subheader("Resultados")
-
-    st.write(f"Z: {z:.4f}")
-    st.write(f"p-value: {p:.5f}")
-    st.write(f"Decisión: {decision}")
-
-    # INTERPRETACIÓN
-    st.subheader("Interpretación")
+    st.subheader("📊 Resultados Estadísticos")
+    st.write(f"**Z:** {z:.4f} | **p-value:** {p:.5f}")
 
     if p < alpha:
-        st.write("Se rechaza H0. Hay evidencia suficiente.")
+        st.error(f"❌ {decision}")
     else:
-        st.write("No se rechaza H0. No hay evidencia suficiente.")
+        st.success(f"✅ {decision}")
 
-    # GRÁFICA
+    # Gráfica
     x = np.linspace(-4, 4, 1000)
     y = norm.pdf(x)
 
-    fig3, ax3 = plt.subplots()
+    fig3, ax3 = plt.subplots(figsize=(8, 3))
     ax3.plot(x, y)
 
     if tipo == "bilateral":
@@ -189,51 +146,71 @@ if "z" in st.session_state:
     else:
         ax3.fill_between(x, y, where=(x <= z_crit), alpha=0.3)
 
-    ax3.axvline(z, color='red')
+    ax3.axvline(z, linestyle='--', label=f'Z ({z:.2f})')
+    ax3.legend()
+
     st.pyplot(fig3)
 
+    st.write("### 🧠 Interpretación automática")
+    if p < alpha:
+        st.write("Se rechaza H0. Existe evidencia suficiente.")
+    else:
+        st.write("No se rechaza H0. No hay evidencia suficiente.")
+
+    # ================================
+    # IA GEMINI
+    # ================================
     st.divider()
+    st.subheader("🤖 Asistente IA")
 
-    # ========================
-    # IA
-    # ========================
-    st.header("🤖 Asistente IA")
+    if st.button("🧠 Analizar con IA"):
 
-    if st.button("Analizar con IA"):
-        with st.spinner("Pensando..."):
-            try:
-                prompt = f"""
-Se realizó una prueba Z:
+        with st.spinner("Analizando..."):
 
-media={media_muestral}
-H0={media_hipotetica}
-n={n}
-sigma={sigma}
-alpha={alpha}
-Z={z}
-p={p}
-tipo={tipo}
+            prompt = f"""
+Se realizó una prueba Z con los siguientes datos:
 
-Explica decisión, interpretación y conclusión práctica.
+Media muestral: {media_muestral}
+Media hipotética: {media_hipotetica}
+n: {n}
+sigma: {sigma}
+alpha: {alpha}
+tipo: {tipo}
+Z: {z}
+p-value: {p}
+
+¿Se rechaza H0? Explica en términos simples y da una conclusión práctica.
 """
+
+            try:
                 response = model.generate_content(prompt)
                 st.session_state.respuesta_ia = response.text
 
             except Exception as e:
-                st.error(e)
+                st.error(f"Error con la IA: {e}")
 
+    # Mostrar IA
     if "respuesta_ia" in st.session_state:
+        st.subheader("🤖 Respuesta de la IA")
         st.write(st.session_state.respuesta_ia)
 
-        # COMPARACIÓN
-        st.subheader("Comparación con IA")
+        # ================================
+# ✅ COMPARACIÓN CON IA
+# ================================
+st.subheader("📊 Comparación con la IA")
 
-        st.write(f"Decisión estadística: {decision}")
+if "decision" in st.session_state and "respuesta_ia" in st.session_state:
 
-        if "rechaza" in st.session_state.respuesta_ia.lower():
-            st.write("La IA sugiere rechazar H0")
-        else:
-            st.write("La IA sugiere no rechazar H0")
+    decision = st.session_state.decision.lower()
+    respuesta = st.session_state.respuesta_ia.lower()
 
-else:
-    st.warning("Ejecuta la prueba primero")
+    st.write(f"📌 Tu decisión: {st.session_state.decision}")
+
+    if "no se rechaza" in respuesta and "no rechazar" in decision:
+        st.success("🤖 La IA coincide con tu resultado")
+
+    elif "rechaza" in respuesta and "rechazar" in decision:
+        st.success("🤖 La IA coincide con tu resultado")
+
+    else:
+        st.warning("⚠ La IA podría diferir, revisa interpretación")
